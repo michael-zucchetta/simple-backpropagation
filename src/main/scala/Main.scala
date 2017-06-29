@@ -12,14 +12,12 @@ object Main {
     val forcedWeights = Vector(
       Vector(
         // edges  connecting the hidden neuron from input
-        Vector(0.8, 0.2),
+        Vector(0.1, 0.8),
         // second hidden neuron
-        Vector(0.4, 0.9),
-        // edges going from input to third neuron
-        Vector(0.3, 0.5)
+        Vector(0.4, 0.6)
       ),
       Vector(
-        Vector(0.3, 0.5, 0.9)
+        Vector(0.3, 0.9)
       )
     )
     val inputValues = for {

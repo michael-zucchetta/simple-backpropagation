@@ -4,6 +4,7 @@ import fs2.Task
 import models.Inputs
 
 import scala.io.Source
+import scala.util.Try
 
 object CsvReader {
 
@@ -14,7 +15,7 @@ object CsvReader {
           case s :+ tail =>
             Inputs(
               values = s.map(_.toDouble),
-              expectedClass = Some(tail.toInt)
+              expectedClass = Try(tail.toDouble).toOption
             )
         }
       }.toVector

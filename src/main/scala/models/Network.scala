@@ -3,28 +3,37 @@ package models
 import fs2.Task
 import org.log4s.getLogger
 
+import scala.collection.mutable.ArraySeq
 import scala.util.Random
 
 case class Network(inputsSize: Int, outputSize: Int, hiddenNeuronsSize: Int, learningRate: Double, bias: Double, forcedWeightsOpt: Option[Vector[Vector[Vector[Double]]]] = None) {
   private[this] val logger = getLogger
 
-  private var weightsMatrix = forcedWeightsOpt.getOrElse {
-    Vector(
-      // for each hidden neuron, we initialize a vector of inputSize elements, these represent the edges connecting the inputs to the neuron
-      (0 to hiddenNeuronsSize)
-        .toVector
-        // values initialized between -1 and 1
-        .map(_ => {
-        (0 to inputsSize)
-          .map(_ => -1 + 2 * Random.nextDouble()).toVector
-      }),
-      // similarly to above, the size of all the edges connecting the hidden neurons to the output
-      (0 to outputSize)
-        .toVector
-        .map(_ => {
-          (0 to hiddenNeuronsSize)
+  private var weightsMatrix = {
+
+    var vectorWeights = forcedWeightsOpt.getOrElse {
+      Vector(
+        // for each hidden neuron, we initialize a vector of inputSize elements, these represent the edges connecting the inputs to the neuron
+        (0 to hiddenNeuronsSize)
+          .toVector
+          // values initialized between -1 and 1
+          .map(_ => {
+          (0 to inputsSize)
             .map(_ => -1 + 2 * Random.nextDouble()).toVector
-        })
+        }),
+        // similarly to above, the size of all the edges connecting the hidden neurons to the output
+        (0 to outputSize)
+          .toVector
+          .map(_ => {
+            (0 to hiddenNeuronsSize)
+              .map(_ => -1 + 2 * Random.nextDouble()).toVector
+          })
+      )
+    }
+
+    ArraySeq(vectorWeights: _*).map(vector =>
+      ArraySeq(vector: _*)
+        .map(weights => ArraySeq(weights: _*))
     )
   }
 
@@ -46,7 +55,7 @@ case class Network(inputsSize: Int, outputSize: Int, hiddenNeuronsSize: Int, lea
         sigmoidNeuronActivation(outputs.sum)
       }
       logger.info(s"Results $newValues")
-      previousValues :+ Inputs(newValues, prevInputs.expectedClass)
+      previousValues :+ Inputs(newValues.toVector, prevInputs.expectedClass)
     }
   }
 
@@ -82,25 +91,27 @@ case class Network(inputsSize: Int, outputSize: Int, hiddenNeuronsSize: Int, lea
     val reversedOutputs = outputs.reverse
     val finalOutput = reversedOutputs.head
     val firstDelta = finalOutput.values.map { value =>
-      val error = (finalOutput.expectedClass.getOrElse(0) - value)
+      val error = (finalOutput.expectedClass.getOrElse(0.0) - value)
       error * derivativeSigmoidNeuronActivation(value)
     }
     logger.info(s"First delta is $firstDelta")
 
-    weightsMatrix.reverse.zip(reversedOutputs.drop(1)).map { case (layer, output) =>
+    weightsMatrix.reverse.zip(reversedOutputs.drop(1)).foldLeft(firstDelta){ case (deltas, (layer, output)) =>
       // Considering error as a function of the inputs of all neurons receiving input from neuron j
       // weights * every delta of the output neuron the input neuron gives input to
-      layer.zip(firstDelta).map { case (weights, delta) =>
+      layer.zip(deltas).flatMap { case (weights, delta) =>
         // to change to match case head :+ tail
-        val deltas = weights.zip(output.values).map { case (calculatedValue, outputError) => {
-                logger.info(s"${calculatedValue} * $delta  * ${derivativeSigmoidNeuronActivation(outputError)}")
+        val deltas = weights.zipWithIndex.zip(output.values).map { case ((calculatedValue, index), outputError) => {
+                logger.info(s"${outputError} * $delta  * ${derivativeSigmoidNeuronActivation(outputError)}")
                 // for the hidden layers, the calculus is between the previous error and the actual weight
-                (calculatedValue * delta ) * derivativeSigmoidNeuronActivation(outputError)
+                weights(index) = calculatedValue + delta * outputError
+                logger.info(s"New weight is ${weights(index)}")
+                delta * weights(index) * derivativeSigmoidNeuronActivation(outputError)
             }
           }
         logger.info(s"iteration: $deltas with weights size ${weights.size}")
         deltas
-      }
+      }.toVector
     }
   }
 }
